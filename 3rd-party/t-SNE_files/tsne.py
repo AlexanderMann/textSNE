@@ -72,13 +72,13 @@ def x2p(X = Math.array([]), tol = 1e-5, perplexity = 30.0):
                 
             # If not, increase or decrease precision
             if Hdiff > 0:
-                betamin = beta[i];
+                betamin = float(beta[i]);
                 if betamax == Math.inf or betamax == -Math.inf:
                     beta[i] = beta[i] * 2;
                 else:
                     beta[i] = (beta[i] + betamax) / 2;
             else:
-                betamax = beta[i];
+                betamax = float(beta[i]);
                 if betamin == Math.inf or betamin == -Math.inf:
                     beta[i] = beta[i] / 2;
                 else:
@@ -108,7 +108,31 @@ def pca(X = Math.array([]), no_dims = 50):
     return Y;
 
 
-def tsne(X = Math.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0, use_pca=False):
+def gradient(Y, P):
+    (n, d) = Y.shape;
+    dY = Math.zeros((n, d));
+    # Compute pairwise affinities
+    sum_Y = Math.sum(Math.square(Y), 1);        
+    num = 1 / (1 + Math.add(Math.add(-2 * Math.dot(Y, Y.T), sum_Y).T, sum_Y));
+    num[range(n), range(n)] = 0;
+    Q = num / Math.sum(num);
+    Q = Math.maximum(Q, 1e-12);
+    
+    # Compute gradient
+    PQ = P - Q;
+    for i in range(n):
+        dY[i,:] = Math.sum(Math.tile(PQ[:,i] * num[:,i], (d, 1)).T * (Y[i,:] - Y), 0);
+    return dY
+
+
+def update_gains(gains, dY, iY):
+    min_gain = 0.01;
+    gains = (gains + 0.2) * ((dY > 0) != (iY > 0)) + (gains * 0.8) * ((dY > 0) == (iY > 0));
+    gains[gains < min_gain] = min_gain;
+    return gains;
+
+
+def tsne(X = Math.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0, use_pca=False, Y = Math.array([])):
     """Runs t-SNE on the dataset in the NxD array X to reduce its dimensionality to no_dims dimensions.
     The syntaxis of the function is Y = tsne.tsne(X, no_dims, perplexity), where X is an NxD NumPy array."""
     
@@ -129,7 +153,9 @@ def tsne(X = Math.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0, 
     final_momentum = 0.8;
     eta = 500;
     min_gain = 0.01;
-    Y = Math.random.randn(n, no_dims);
+    # This is purely for testability
+    if Y == Math.array([]):
+        Y = Math.random.randn(n, no_dims);
     dY = Math.zeros((n, no_dims));
     iY = Math.zeros((n, no_dims));
     gains = Math.ones((n, no_dims));
@@ -140,7 +166,7 @@ def tsne(X = Math.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0, 
     P = P / Math.sum(P);
     P = P * 4;                                    # early exaggeration
     P = Math.maximum(P, 1e-12);
-    
+
     # Run iterations
     for iter in range(max_iter):
         
@@ -175,7 +201,7 @@ def tsne(X = Math.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0, 
         # Stop lying about P-values
         if iter == 100:
             P = P / 4;
-            
+
     # Return solution
     return Y;
         
